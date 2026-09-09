@@ -1,0 +1,16 @@
+# Object files
+*.o
+
+# Executable files created by make
+src/sequential_min_max
+src/parallel_min_max
+src/exec_sequential_min_max
+
+# Temporary result files for --by_files mode
+src/min_max_*.txt
+
+# VS Code settings
+.vscode/
+
+# System files
+.DS_Store

@@ -1,0 +1,14 @@
+# Object files
+src/*.o
+
+# Static libraries
+src/*.a
+
+# Executable files
+src/parallel_min_max
+src/zombie_demo
+src/process_memory
+src/psum
+
+# Temporary files from parallel_min_max
+src/min_max_*.txt

@@ -1,0 +1,8 @@
+# Compiled executables for laboratory work 5
+deadlock
+factorial
+mutex_with
+mutex_without
+
+# Object files
+*.o

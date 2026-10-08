@@ -1,54 +1,95 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#define BUFSIZE 100
-#define SADDR struct sockaddr
-#define SIZE sizeof(struct sockaddr_in)
+static int parse_number(const char *text, int min, int max, const char *name) {
+  char *end;
+  long value;
+
+  errno = 0;
+  value = strtol(text, &end, 10);
+  if (errno != 0 || *text == '\0' || *end != '\0' ||
+      value < min || value > max) {
+    fprintf(stderr, "Invalid %s: %s (expected %d..%d)\n",
+            name, text, min, max);
+    exit(EXIT_FAILURE);
+  }
+  return (int)value;
+}
 
 int main(int argc, char *argv[]) {
   int fd;
-  int nread;
-  char buf[BUFSIZE];
+  int port;
+  int bufsize;
+  char *buf;
+  ssize_t nread;
   struct sockaddr_in servaddr;
-  if (argc < 3) {
-    printf("Too few arguments \n");
-    exit(1);
+
+  if (argc != 4) {
+    fprintf(stderr, "Usage: %s <server_ip> <port> <buffer_size>\n", argv[0]);
+    return EXIT_FAILURE;
   }
 
-  if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    perror("socket creating");
-    exit(1);
+  port = parse_number(argv[2], 1, 65535, "port");
+  bufsize = parse_number(argv[3], 1, 65535, "buffer_size");
+  buf = malloc((size_t)bufsize);
+  if (buf == NULL) {
+    perror("malloc");
+    return EXIT_FAILURE;
   }
 
-  memset(&servaddr, 0, SIZE);
+  fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) {
+    perror("socket");
+    free(buf);
+    return EXIT_FAILURE;
+  }
+
+  servaddr = (struct sockaddr_in){0};
   servaddr.sin_family = AF_INET;
+  servaddr.sin_port = htons((unsigned short)port);
 
-  if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
-    perror("bad address");
-    exit(1);
+  if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) != 1) {
+    fprintf(stderr, "Invalid IPv4 address: %s\n", argv[1]);
+    close(fd);
+    free(buf);
+    return EXIT_FAILURE;
   }
 
-  servaddr.sin_port = htons(atoi(argv[2]));
-
-  if (connect(fd, (SADDR *)&servaddr, SIZE) < 0) {
+  if (connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
     perror("connect");
-    exit(1);
+    close(fd);
+    free(buf);
+    return EXIT_FAILURE;
   }
 
-  write(1, "Input message to send\n", 22);
-  while ((nread = read(0, buf, BUFSIZE)) > 0) {
-    if (write(fd, buf, nread) < 0) {
-      perror("write");
-      exit(1);
+  puts("Input message to send (Ctrl+D to finish):");
+  while ((nread = read(STDIN_FILENO, buf, (size_t)bufsize)) > 0) {
+    ssize_t sent = 0;
+    while (sent < nread) {
+      ssize_t result = write(fd, buf + sent, (size_t)(nread - sent));
+      if (result <= 0) {
+        perror("write");
+        close(fd);
+        free(buf);
+        return EXIT_FAILURE;
+      }
+      sent += result;
     }
   }
 
+  if (nread < 0) {
+    perror("read");
+    close(fd);
+    free(buf);
+    return EXIT_FAILURE;
+  }
+
   close(fd);
-  exit(0);
+  free(buf);
+  return EXIT_SUCCESS;
 }
